@@ -935,6 +935,49 @@
         margin: 18px 0 7px;
       }
 
+      .priority-choice {
+        margin-top: 18px;
+        padding: 14px;
+        border: 1px solid #efc39f;
+        border-left: 4px solid #d98435;
+        border-radius: 9px;
+        background: #fff8f1;
+      }
+
+      .priority-choice-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .priority-choice-heading label {
+        margin: 0;
+        color: #854619;
+        font-size: 12px;
+      }
+
+      .priority-choice-heading span {
+        color: #854619;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+      }
+
+      .priority-choice select {
+        margin-top: 10px;
+        border-color: #e7b98f;
+        font-weight: 700;
+      }
+
+      .priority-choice p {
+        margin: 8px 0 0;
+        color: #795b45;
+        font-size: 10px;
+        line-height: 1.5;
+      }
+
       .form-card input,
       .form-card select,
       .form-card textarea,
@@ -1128,6 +1171,10 @@
       .priority-normal {
         background: #eff1f0;
         color: #69756d;
+      }
+      .priority-low {
+        background: #e9f4eb;
+        color: #31704b;
       }
       .priority-high {
         background: #fff0e9;
@@ -1855,6 +1902,23 @@
               Include helpful details so the team can locate the issue.
             </p>
 
+            <div class="priority-choice">
+              <div class="priority-choice-heading">
+                <label for="priority">Choose issue priority *</label>
+                <span>Your choice</span>
+              </div>
+              <select id="priority" required aria-describedby="priorityHelp">
+                <option value="">Select a priority level</option>
+                <option value="Low">Low — non-urgent</option>
+                <option value="Normal">Normal — needs attention</option>
+                <option value="High">High — urgent</option>
+              </select>
+              <p id="priorityHelp">
+                Choose High for urgent or safety-related issues. Facilities staff
+                will review the priority when assessing your report.
+              </p>
+            </div>
+
             <label for="photo">Upload a photo (optional)</label>
             <input
               id="photo"
@@ -2006,6 +2070,12 @@
             <option value="In Progress">In progress</option>
             <option value="Resolved">Resolved</option>
             <option value="Dismissed">Dismissed</option>
+          </select>
+          <select id="maintenanceSort" aria-label="Sort maintenance issues">
+            <option value="priority-desc">Priority: High to low</option>
+            <option value="priority-asc">Priority: Low to high</option>
+            <option value="status-asc">Status: Open first</option>
+            <option value="status-desc">Status: Closed first</option>
           </select>
         </div>
 
@@ -2184,6 +2254,12 @@
         return "pending";
       }
 
+      function priorityClass(priority) {
+        if (priority === "High") return "priority-high";
+        if (priority === "Low") return "priority-low";
+        return "priority-normal";
+      }
+
       function statusDescription(status) {
         const descriptions = {
           Pending: "Awaiting facilities review and assignment.",
@@ -2359,8 +2435,7 @@
       }
 
       function maintenanceCard(report) {
-        const priorityClass =
-          report.priority === "High" ? "priority-high" : "priority-normal";
+        const priority = report.priority || "Normal";
         const canManage = activeAccount?.role === "faculty";
         const selected =
           report.id === selectedReportId ? " selected-report" : "";
@@ -2381,7 +2456,7 @@
           </div>
         </div>
         <div class="maintenance-item-controls">
-          <span class="priority ${priorityClass}">${escapeHTML(report.priority || "Normal")} priority</span>
+          <span class="priority ${priorityClass(priority)}">${escapeHTML(priority)} priority</span>
           ${
             canManage
               ? `<select class="maintenance-select" data-id="${report.id}"
@@ -2435,6 +2510,9 @@
 
       <div class="report-actions">
         ${clickable ? `<button class="secondary" type="button" data-open-maintenance="true" data-report-id="${report.id}">View in Maintenance</button>` : ""}
+        <span class="priority ${priorityClass(report.priority || "Normal")}">
+          ${escapeHTML(report.priority || "Normal")} priority
+        </span>
         <span class="status ${statusClass(report.status)}">
           ${escapeHTML(report.status === "Pending" ? "Awaiting review" : report.status)}
         </span>
@@ -2770,6 +2848,7 @@
           .value.toLowerCase()
           .trim();
         const maintenanceFilter = $("maintenanceFilter").value;
+        const maintenanceSort = $("maintenanceSort").value;
 
         const maintenanceFiltered = reports.filter((report) => {
           const text =
@@ -2781,8 +2860,28 @@
           );
         });
 
-        $("maintenanceReports").innerHTML = maintenanceFiltered.length
-          ? maintenanceFiltered.map(maintenanceCard).join("")
+        const priorityOrder = { Low: 0, Normal: 1, High: 2 };
+        const statusOrder = {
+          Pending: 0,
+          "In Progress": 1,
+          Resolved: 2,
+          Dismissed: 3,
+        };
+        const sortedMaintenance = maintenanceFiltered.sort((a, b) => {
+          const descending = maintenanceSort.endsWith("desc");
+          const comparison = maintenanceSort.startsWith("priority")
+            ? (priorityOrder[a.priority] ?? 1) -
+              (priorityOrder[b.priority] ?? 1)
+            : statusOrder[a.status] - statusOrder[b.status];
+          return (
+            (descending ? -comparison : comparison) ||
+            new Date(b.submittedAt).getTime() -
+              new Date(a.submittedAt).getTime()
+          );
+        });
+
+        $("maintenanceReports").innerHTML = sortedMaintenance.length
+          ? sortedMaintenance.map(maintenanceCard).join("")
           : '<div class="empty">No issues match your search.</div>';
 
         renderProfile();
@@ -2893,6 +2992,7 @@
       $("historySearch").addEventListener("input", render);
       $("maintenanceSearch").addEventListener("input", render);
       $("maintenanceFilter").addEventListener("change", render);
+      $("maintenanceSort").addEventListener("change", render);
 
       document.addEventListener("change", (event) => {
         if (!event.target.matches("[data-id]")) return;
@@ -2953,8 +3053,14 @@
         const location = $("location").value.trim();
         const category = $("category").value;
         const description = $("description").value.trim();
+        const priority = $("priority").value;
 
-        if (!location || !category || description.length < 8) {
+        if (
+          !location ||
+          !category ||
+          description.length < 8 ||
+          !["Low", "Normal", "High"].includes(priority)
+        ) {
           showToast("Please complete all required fields.");
           return;
         }
@@ -2970,7 +3076,7 @@
           category,
           description,
           team: teamForCategory(category),
-          priority: category === "Safety concern" ? "High" : "Normal",
+          priority,
           status: "Pending",
           date: submittedAt,
           updated: submittedAt,
